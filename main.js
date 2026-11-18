@@ -1,5 +1,6 @@
-// DUBAO: motion and live details. Everything degrades to a readable static page.
+// DUBAO: the live hour of Douala, the stage pictures and the entrances.
 (() => {
+  document.documentElement.classList.add("js");
   const WA = "237679905230";
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -10,116 +11,74 @@
     a.rel = "noopener";
   });
 
-  // Live Douala time: the 24h/24 promise, shown rather than told.
-  const fmt = new Intl.DateTimeFormat("fr-FR", { timeZone: "Africa/Douala", hour: "2-digit", minute: "2-digit" });
-  const hourFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: "Africa/Douala", hour: "numeric", hour12: false });
-  const state = document.querySelector("[data-state]");
+  // The live thing: the real hour in Douala. The frontage turns to night after dark,
+  // and the bar says what is true at this very minute: the centre is open.
+  const time = new Intl.DateTimeFormat("fr-FR", { timeZone: "Africa/Douala", hour: "2-digit", minute: "2-digit" });
+  // A strict numeric hour ("20"), not the French display form ("20 h").
+  const hourFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Douala", hour: "2-digit", hourCycle: "h23" });
+  const live = document.querySelector("[data-live]");
+  const hourSlot = document.querySelector("[data-hour]");
+  const stageA = document.querySelector(".split .stage");
+  const show = (stage, key) => {
+    stage.querySelectorAll(".stage-img").forEach((img) => img.classList.toggle("is-on", img.dataset.key === key));
+  };
   const tick = () => {
     const now = new Date();
-    document.querySelectorAll("[data-clock]").forEach((t) => { t.textContent = fmt.format(now); });
-    if (state) {
-      const h = Number(hourFmt.format(now));
-      state.textContent = h >= 22 || h < 6 ? "Le centre est ouvert, même la nuit." : "Le centre est ouvert.";
-    }
+    const hhmm = time.format(now).replace(":", "h");
+    const h = Number(hourFmt.format(now));
+    const night = h >= 19 || h < 6;
+    if (live) live.textContent = `Il est ${hhmm} à Douala. Le centre est ouvert.`;
+    if (hourSlot) hourSlot.textContent = hhmm;
+    if (stageA) show(stageA, night ? "night" : "day");
   };
+  // First paint shows the right light at once; later changes crossfade.
+  stageA?.classList.add("instant");
   tick();
-  setInterval(tick, 15000);
+  requestAnimationFrame(() => requestAnimationFrame(() => stageA?.classList.remove("instant")));
+  setInterval(tick, 20000);
 
-  // Rotating verb in the poster title.
-  const verbs = [...document.querySelectorAll(".verb")];
-  if (verbs.length > 1 && !reduce) {
-    let i = 0;
-    setInterval(() => {
-      const cur = verbs[i];
-      i = (i + 1) % verbs.length;
-      const next = verbs[i];
-      cur.classList.remove("is-on");
-      cur.classList.add("is-out");
-      next.classList.remove("is-out");
-      next.style.transition = "none";
-      next.style.transform = "translateY(120%)";
-      void next.offsetWidth;
-      next.style.transition = "";
-      next.style.transform = "";
-      next.classList.add("is-on");
-      setTimeout(() => cur.classList.remove("is-out"), 800);
-    }, 2400);
-  }
-
-  // Top bar turns to paper once the poster is gone.
-  const bar = document.getElementById("bar");
-  const poster = document.querySelector(".poster");
-  const write = document.getElementById("ecrire");
-
-  // Manifesto: words light up as the paragraph crosses the screen.
-  const words = document.querySelector("[data-words]");
-  let wordEls = [];
-  if (words && !reduce) {
-    words.innerHTML = words.textContent.trim().split(/\s+/).map((w) => `<span class="w">${w}</span>`).join(" ");
-    wordEls = [...words.querySelectorAll(".w")];
-  }
-
-  // Academy rail: vertical scroll drives a horizontal track (desktop only).
-  const rail = document.querySelector("[data-rail]");
-  const track = rail?.querySelector(".rail-track");
-  const bar2 = rail?.querySelector(".rail-progress span");
-  const wide = matchMedia("(min-width: 981px)");
-  const sizeRail = () => {
-    if (!rail || !track) return;
-    if (!wide.matches || reduce) { rail.style.height = ""; track.style.transform = ""; return; }
-    const extra = Math.max(0, track.scrollWidth - window.innerWidth);
-    rail.style.height = `${window.innerHeight + extra}px`;
+  // Second stage: the picture follows the section being read, with its caption.
+  const captions = {
+    formation: "Formation d'agents de santé au Cameroun (CC0). Ce n'est pas l'Academy.",
+    douala: "Douala en fin de journée, par Bmnda (CC0).",
   };
-
-  const onScroll = () => {
-    const vh = window.innerHeight;
-    // bar: transparent at the very top; then night over dark blocks, paper over light ones
-    const scrolled = window.scrollY > 24;
-    const overDark = poster.getBoundingClientRect().bottom > 68 || write.getBoundingClientRect().top <= 68;
-    bar.classList.toggle("light", scrolled && !overDark);
-    bar.classList.toggle("dark", scrolled && overDark);
-
-    if (wordEls.length) {
-      const r = words.getBoundingClientRect();
-      const p = Math.min(1, Math.max(0, (vh * 0.85 - r.top) / (r.height + vh * 0.35)));
-      const lit = Math.round(p * wordEls.length);
-      wordEls.forEach((w, k) => w.classList.toggle("lit", k < lit));
-    }
-
-    if (rail && track && wide.matches && !reduce) {
-      const r = rail.getBoundingClientRect();
-      const total = rail.offsetHeight - vh;
-      const p = total > 0 ? Math.min(1, Math.max(0, -r.top / total)) : 0;
-      const extra = Math.max(0, track.scrollWidth - window.innerWidth);
-      track.style.transform = `translate3d(${-p * extra}px,0,0)`;
-      if (bar2) bar2.style.width = `${p * 100}%`;
-    }
-  };
-
-  let ticking = false;
-  const request = () => {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(() => { ticking = false; onScroll(); });
-  };
-  sizeRail();
-  onScroll();
-  window.addEventListener("scroll", request, { passive: true });
-  window.addEventListener("resize", () => { sizeRail(); request(); });
-  wide.addEventListener?.("change", () => { sizeRail(); request(); });
-  document.fonts?.ready.then(() => { sizeRail(); request(); });
-
-  // WhatsApp dock: only when no other WhatsApp call is on screen.
-  const dock = document.querySelector(".wa-dock");
-  const watched = [document.querySelector(".poster .wa"), write].filter(Boolean);
-  if ("IntersectionObserver" in window && dock) {
-    const visible = new Set();
-    dock.classList.add("hide");
+  const stageB = document.querySelector(".split-b .stage");
+  const cap = document.querySelector("[data-caption]");
+  if (stageB && "IntersectionObserver" in window) {
     const io = new IntersectionObserver((entries) => {
-      entries.forEach((en) => (en.isIntersecting ? visible.add(en.target) : visible.delete(en.target)));
-      dock.classList.toggle("hide", visible.size > 0);
-    }, { threshold: 0.1 });
-    watched.forEach((el) => io.observe(el));
+      entries.forEach((en) => {
+        if (!en.isIntersecting) return;
+        const key = en.target.dataset.show;
+        show(stageB, key);
+        if (cap) cap.textContent = captions[key] || "";
+      });
+    }, { rootMargin: "-45% 0px -45% 0px" });
+    document.querySelectorAll("[data-show]").forEach((s) => io.observe(s));
+  }
+
+  // Entrances: heading, then text, then picture, staggered inside each section.
+  const items = [...document.querySelectorAll(".reveal")];
+  if (reduce || !("IntersectionObserver" in window)) {
+    items.forEach((el) => el.classList.add("in"));
+  } else {
+    const groups = new Map();
+    items.forEach((el) => {
+      const host = el.closest("section, footer") || document.body;
+      const list = groups.get(host) || [];
+      el.style.setProperty("--d", `${Math.min(list.length, 6) * 80}ms`);
+      list.push(el);
+      groups.set(host, list);
+    });
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((en) => {
+        if (!en.isIntersecting) return;
+        en.target.classList.add("in");
+        io.unobserve(en.target);
+      });
+    }, { rootMargin: "0px 0px -10% 0px" });
+    items.forEach((el) => io.observe(el));
+    // Never leave content hidden if something goes wrong.
+    setTimeout(() => items.forEach((el) => { if (el.getBoundingClientRect().top < innerHeight) el.classList.add("in"); }), 1200);
   }
 
   document.getElementById("year").textContent = String(new Date().getFullYear());
